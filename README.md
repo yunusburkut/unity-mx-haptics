@@ -16,6 +16,8 @@ The agent follows [INSTALL_FOR_AGENTS.md](INSTALL_FOR_AGENTS.md) and shows you i
 2. It adds an Editor-only mirror, so each one plays on the mouse as the closest match to the iPhone haptic it would play.
 3. Your phone builds get none of it.
 
+Every line it adds is marked `// MxHaptics hook`. To remove everything, ask the agent to uninstall the package.
+
 ## Install by hand
 
 In Unity: **Window → Package Manager → + → Add package from git URL**, then paste:
@@ -25,6 +27,10 @@ https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.2
 ```
 
 To update later, change the tag to the newest one in the repo's tags.
+
+Unity needs `git` installed to fetch the package. Teammates and build machines (CI, Cloud Build) get it through
+`manifest.json` too; without git, package resolution fails and so does every build. If that is a problem, copy the
+repo into `Packages/com.yunusburkut.mxhaptics` instead (see [Change the package](#change-the-package)).
 
 ## Use
 
@@ -77,8 +83,13 @@ Fork the repo to share your version, and pull requests are welcome.
 
 - Works in the Editor and in Windows and macOS builds. Phone, console and WebGL builds don't include the package,
   so wrap direct calls in shared code with `#if UNITY_EDITOR || UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX`.
-- macOS may ask for **Input Monitoring** permission once (System Settings → Privacy & Security).
-- No mouse connected? Nothing happens, no errors.
-- Call it on events, not every frame.
+  In the Linux Editor the calls do nothing.
+- Connects over Bluetooth or a Logi Bolt / Unifying receiver. Other devices are left alone: non-Logitech devices
+  are never written to, and on macOS keyboards are never opened.
+- macOS may ask for **Input Monitoring** permission once, when the mouse is first used (System Settings → Privacy &
+  Security).
+- No mouse connected? Nothing happens, no errors. A mouse connected later is found within 60 seconds.
+- The mouse plays fixed, short waveforms: a long haptic clip or a constant buzz becomes one pulse.
+- Call it on events, not every frame. Up to 4 plays wait in line; extra ones are dropped.
 
 MIT License. Protocol details from [OpenLogi](https://github.com/AprilNEA/OpenLogi).
