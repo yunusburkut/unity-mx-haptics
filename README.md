@@ -7,8 +7,10 @@ Make your Logitech MX Master 4 mouse vibrate from Unity. No extra software neede
 In Unity: **Window → Package Manager → + → Add package from git URL**, then paste:
 
 ```
-https://github.com/yunusburkut/unity-mx-haptics.git
+https://github.com/yunusburkut/unity-mx-haptics.git#v1.0.0
 ```
+
+Drop `#v1.0.0` to always get the latest version.
 
 ## Use
 
