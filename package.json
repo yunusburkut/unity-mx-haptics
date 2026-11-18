@@ -1,8 +1,8 @@
 {
   "name": "com.yunusburkut.mxhaptics",
-  "version": "1.1.1",
+  "version": "2.0.0",
   "displayName": "MX Master 4 Haptics",
-  "description": "Haptic feedback on the Logitech MX Master 4 mouse, with an iOS-style API. Windows and macOS; does nothing on other platforms.",
+  "description": "Haptic feedback on the Logitech MX Master 4 mouse, with an iOS-style API. Editor, Windows and macOS only; not included in phone, console or WebGL builds.",
   "unity": "2021.3",
   "license": "MIT",
   "author": { "name": "yunusburkut", "url": "https://github.com/yunusburkut" },

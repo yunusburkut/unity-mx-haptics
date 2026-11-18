@@ -1,6 +1,7 @@
 {
-  "name": "MxHaptics",
-  "rootNamespace": "MxHaptics",
-  "references": [],
-  "autoReferenced": true
+    "name": "MxHaptics",
+    "rootNamespace": "MxHaptics",
+    "references": [],
+    "includePlatforms": ["Editor", "WindowsStandalone32", "WindowsStandalone64", "macOSStandalone"],
+    "autoReferenced": true
 }

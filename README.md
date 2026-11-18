@@ -2,15 +2,29 @@
 
 Make your Logitech MX Master 4 mouse vibrate from Unity. No extra software needed.
 
-## Install
+## Install with Claude Code (mirror your phone haptics)
+
+Making a mobile game with haptics? Tell Claude Code (or any AI coding agent), in any language:
+
+```
+Install https://github.com/yunusburkut/unity-mx-haptics into my project so it mirrors my project's haptics one to one.
+```
+
+The agent follows [AGENTS.md](AGENTS.md):
+
+1. It finds every haptic in your project: Nice Vibrations, Feel feedbacks, `Handheld.Vibrate` and native iOS calls.
+2. It adds an Editor-only mirror, so each one plays on the mouse as the iPhone haptic it would play.
+3. Your phone builds get none of it.
+
+## Install by hand
 
 In Unity: **Window → Package Manager → + → Add package from git URL**, then paste:
 
 ```
-https://github.com/yunusburkut/unity-mx-haptics.git#v1.1.1
+https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.0
 ```
 
-Drop `#v1.1.1` to always get the latest version.
+Drop `#v2.0.0` to always get the latest version.
 
 ## Use
 
@@ -61,7 +75,8 @@ Fork the repo to share your version, and pull requests are welcome.
 
 ## Good to know
 
-- Works on Windows and macOS. On other platforms the calls do nothing, so your game still builds.
+- Works in the Editor and in Windows and macOS builds. Phone, console and WebGL builds don't include the package,
+  so wrap direct calls in shared code with `#if UNITY_EDITOR || UNITY_STANDALONE`.
 - macOS may ask for **Input Monitoring** permission once (System Settings → Privacy & Security).
 - No mouse connected? Nothing happens, no errors.
 - Call it on events, not every frame.
