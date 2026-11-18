@@ -1,71 +1,62 @@
 # unity-mx-haptics
 
-Feel Unity game events on the haptic motor of a Logitech **MX Master 4**.
+Feel Unity game events on the haptic motor of a Logitech **MX Master 4**. Install the package and call it:
+no Logi Options+, no plugin, no native DLL.
 
 ```
-Unity  --UDP 127.0.0.1:47800-->  UnityHaptics Logi plugin  --PluginEvents.RaiseEvent-->  Logi Options+  -->  MX Master 4
+MxHapticsClient.Play()  ->  worker thread  ->  HID++ 2.0 report (feature 0x19b0)  ->  MX Master 4
 ```
 
-Unity cannot reach the mouse directly. A small Logi Actions SDK plugin runs inside Logi Plugin Service,
-listens for a waveform name on local UDP and raises the haptic event of the same name.
+The package writes HID++ reports straight to the mouse through the Windows HID API (`hid.dll`, P/Invoke).
+It works over Bluetooth and over a Bolt / Unifying receiver.
 
-## Requirements
+## Install
 
-- MX Master 4 with current firmware, Logi Options+ (Plugin Service 6.x)
-- .NET 10 SDK (to build the plugin)
-- Windows or macOS. Other platforms compile to a no-op.
-
-## 1. Install the Logi plugin
-
-```bash
-dotnet build LogiPlugin -c Debug
-```
-
-The build links the output into Logi Plugin Service and reloads it. Check
-`%LOCALAPPDATA%\Logi\LogiPluginService\Logs\plugin_logs\UnityHaptics.log` for
-`Listening for Unity haptics on 127.0.0.1:47800`.
-
-Quick test without Unity (PowerShell):
-
-```powershell
-$u=New-Object Net.Sockets.UdpClient; $b=[Text.Encoding]::ASCII.GetBytes('sharp_collision'); $u.Send($b,$b.Length,'127.0.0.1',47800)
-```
-
-## 2. Add the Unity package
-
-Package Manager → Add package from git URL:
+Package Manager → **Add package from git URL**:
 
 ```
 https://github.com/yunusburkut/unity-mx-haptics.git?path=/UnityPackage
 ```
 
+## Use
+
+iOS-style API (same names as `UIImpactFeedbackGenerator`, `UISelectionFeedbackGenerator`,
+`UINotificationFeedbackGenerator`):
+
 ```csharp
 using MxHaptics;
 
-MxHapticsClient.Play(MxWaveform.SharpCollision); // hit
-MxHapticsClient.Play(MxWaveform.Jingle);         // level complete
+MxHapticsClient.Impact(MxImpactStyle.Heavy);              // hit
+MxHapticsClient.Selection();                              // menu tick
+MxHapticsClient.Notification(MxNotificationType.Success); // level complete
 ```
 
-`Play` does not allocate after the first call and does nothing if the plugin is not running.
+Or a raw firmware waveform:
 
-## Waveforms
+```csharp
+MxHapticsClient.Play(MxWaveform.Firework);
+```
 
-| Enum | Use |
+Calls are fire and forget and safe from any thread. Without a haptic mouse they do nothing.
+
+## iOS mapping
+
+The mouse plays only its 16 built-in waveforms; custom amplitude curves are not possible.
+Each iOS call maps to the closest waveform, so the feel is similar, not identical.
+Edit `ImpactMap` / `NotificationMap` in `MxHaptics.cs` to tune it.
+
+| iOS | MX Master 4 waveform |
 |---|---|
-| `SharpCollision`, `DampCollision`, `SubtleCollision` | hits, landings, light ticks |
-| `SharpStateChange`, `DampStateChange` | something turned on / off |
-| `Knock`, `Ringing` | attention |
-| `Jingle`, `Completed`, `HappyAlert` | rewards, task done |
-| `AngryAlert` | damage, failure |
+| Impact Light / Medium / Heavy | `SubtleCollision` / `DampCollision` / `SharpCollision` |
+| Impact Soft / Rigid | `DampStateChange` / `SharpStateChange` |
+| Selection | `WhisperCollision` |
+| Notification Success / Warning / Error | `HappyAlert` / `Knock` / `AngryAlert` |
 
-To add or remap one, edit `LogiPlugin/package/events/*.yaml`, the `Waveforms` array in
-`UnityHapticsPlugin.cs` and the `MxWaveform` enum together.
+## Limits
 
-## Notes
-
-- Haptics work only on a machine where this plugin is installed; players need it too.
-- No rate limit: calling `Play` every frame floods the motor. Call it on events.
-- Based on Logitech's [HapticsPlugin sample](https://github.com/Logitech/actions-sdk). Unlike the sample,
-  `pluginFolderWin: bin` must be set or the service fails with `Parameter 'fileName'`.
+- Windows only (Editor and standalone player). Other platforms compile to a no-op; macOS needs an IOKit backend.
+- The HID++ haptic feature (0x19b0) is undocumented. Function numbers and waveform IDs come from
+  [OpenLogi](https://github.com/AprilNEA/OpenLogi) (MIT). A firmware update could change them.
+- No rate limit: a call every frame floods the motor. Call it on events.
 
 MIT License.

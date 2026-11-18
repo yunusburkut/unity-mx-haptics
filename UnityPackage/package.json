@@ -2,7 +2,7 @@
   "name": "com.yunusburkut.mxhaptics",
   "version": "0.1.0",
   "displayName": "MX Master 4 Haptics",
-  "description": "Plays Logitech MX Master 4 haptic waveforms from Unity through the UnityHaptics Logi Options+ plugin (local UDP).",
+  "description": "Plays Logitech MX Master 4 haptic waveforms from Unity by writing HID++ reports directly to the mouse. iOS-style Impact / Selection / Notification API. Windows; no-op elsewhere.",
   "unity": "2022.3",
   "license": "MIT"
 }
