@@ -11,7 +11,7 @@ Rules for everything you add:
 
 - Wrap all added code in `#if UNITY_EDITOR`. Nothing you add may reach a phone build.
 - Mirror what an iPhone plays, using the iOS names below. Do not change what the project itself plays.
-- Mark every line you add to third-party files with `// MxHaptics hook`, so it can be found and removed.
+- Mark every line you add, in any file, with `// MxHaptics hook`, so it can be found and removed.
 - Before you edit any third-party file (Nice Vibrations, Feel, plugins), show the user the planned changes and
   wait for their OK.
 - If a hook line marked `// MxHaptics hook` already exists, leave it; never add it twice.
@@ -21,11 +21,16 @@ Rules for everything you add:
 Add this line to `dependencies` in `Packages/manifest.json`:
 
 ```json
-"com.yunusburkut.mxhaptics": "https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.1"
+"com.yunusburkut.mxhaptics": "https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.2"
 ```
 
-Tell the user: `manifest.json` is usually committed, so teammates get the package too. For them it only acts
-in the Editor when a haptic plays, and it does nothing without a Logitech haptic mouse.
+Tell the user:
+
+- `manifest.json` is usually committed, so teammates get the package too. For them it only acts in the Editor
+  when a haptic plays, and it does nothing without a Logitech haptic mouse.
+- Unity needs `git` on the PATH to fetch a git package. A teammate or build machine (CI, Cloud Build) without git
+  fails to resolve packages, and then every build fails, phone builds included. If that applies, they can copy the
+  package into `Packages/com.yunusburkut.mxhaptics` instead of using the git line.
 
 The package compiles only for the Editor and Windows / macOS players, so it is not in phone builds at all.
 The API is in namespace `MxHaptics`, assembly `MxHaptics` (auto-referenced). Each call matches one iOS haptic:
@@ -54,7 +59,9 @@ List every call site, then mirror them as below.
 
 Every Nice Vibrations haptic goes through four methods, so a hook there mirrors all of them: code calls and Feel
 feedbacks in scenes alike. Nice Vibrations fires no event on desktop, so add one. It reports the iPhone preset each
-call plays, using Nice Vibrations' own iOS choices.
+call plays, using Nice Vibrations' own iOS fallback choices. iPhones with Core Haptics (iPhone 8 and later) play
+emphasis, constant and clip haptics with finer detail than a preset, so the mouse plays the closest preset, not an
+exact copy.
 
 Find `HapticPatterns.cs` and `HapticController.cs` (usually `Assets/Feel/NiceVibrations/Scripts/Components/`).
 If they are under `Library/PackageCache` or another read-only package, stop: edits there are undone on the next
@@ -107,6 +114,8 @@ In `HapticController`, as the first lines of the parameterless `Play()` (a `.hap
 
 Then create `MxHapticsMirror.cs` in the project's game code:
 
+- Not under an `Editor` folder or in an Editor-only asmdef: `[RuntimeInitializeOnLoadMethod]` does not run there.
+  The `#if UNITY_EDITOR` inside the file already keeps it out of builds.
 - If that code has an asmdef, add `MxHaptics` and `Lofelt.NiceVibrations` to its references.
 - If Nice Vibrations has no asmdef (it compiles into `Assembly-CSharp`), put the mirror in a folder without an
   asmdef, so it compiles into `Assembly-CSharp` too.
@@ -151,21 +160,27 @@ static class MxHapticsMirror
 #endif
 ```
 
-Do not add MxHaptics lines next to the project's own Nice Vibrations 4 calls; the hook already covers them.
+Do not add MxHaptics lines next to the project's own Nice Vibrations 4 calls; the hook already covers them. The
+same holds for the project's wrappers (a `HapticsManager`, say) whose methods end in a Nice Vibrations 4 call: a
+second line there would play every haptic twice.
+
+Feel feedbacks with "Only Play If Advanced Requirements Met" set may never reach Nice Vibrations in the Editor, so
+they are not mirrored; list them in your report.
 
 ## 3b. Any other haptic call
 
 Add the matching call next to each call site. If every call goes through one wrapper in the project, add it once
-there instead.
+there instead. Skip any call site or wrapper that the step 3a hook already covers.
 
 - Wrap it in `#if UNITY_EDITOR`, and place it outside any platform block such as `#if UNITY_IOS` or
   `#if UNITY_ANDROID`; inside one, it would only compile when that build target is active.
+- Mark all three lines with `// MxHaptics hook`.
 - If the file belongs to an asmdef, add `MxHaptics` to that asmdef's references.
 
 ```csharp
-#if UNITY_EDITOR
-            MxHaptics.MxHapticsClient.Impact(MxHaptics.MxImpactStyle.Medium);
-#endif
+#if UNITY_EDITOR // MxHaptics hook
+            MxHaptics.MxHapticsClient.Impact(MxHaptics.MxImpactStyle.Medium); // MxHaptics hook
+#endif // MxHaptics hook
 ```
 
 Mapping, by what the iPhone plays:
@@ -196,7 +211,8 @@ Mapping, by what the iPhone plays:
 When the user asks to remove the package:
 
 1. Delete every line marked `// MxHaptics hook` (search the whole project).
-2. Delete `MxHapticsMirror.cs` and every `#if UNITY_EDITOR` block that calls `MxHapticsClient`.
+2. Delete `MxHapticsMirror.cs`. Leave unmarked `MxHapticsClient` calls alone: the user wrote those; list them
+   in your report, since they stop compiling once the package is gone.
 3. Remove `MxHaptics` from asmdef references you added.
 4. Remove the `com.yunusburkut.mxhaptics` line from `Packages/manifest.json`.
 5. Let Unity compile and confirm the Console has no errors.

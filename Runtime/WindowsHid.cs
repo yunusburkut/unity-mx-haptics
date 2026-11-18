@@ -9,13 +9,17 @@ namespace MxHaptics
 {
     static class HidTransport
     {
+        public static void Shutdown() { }   // nothing global to release on Windows
+
+
         // Logitech vendor collections (page 0xFF00 receiver / 0xFF43 Bluetooth) with 20-byte output reports.
         public static IEnumerable<IHidTransport> OpenCandidates()
         {
             foreach (string path in Native.EnumerateHidPaths())
             {
                 // Open only Logitech interfaces: USB / receiver paths carry "vid_046d", Bluetooth LE ones "vid&02046d".
-                // Other HID devices (security keys, controllers) are never touched.
+                // Other HID devices (security keys, controllers) are skipped unopened, unless "046d" happens to
+                // appear elsewhere in their path; the vendor ID check below then closes them without writing.
                 if (path.IndexOf("046d", StringComparison.OrdinalIgnoreCase) < 0) continue;
                 var h = Native.CreateFile(path, Native.GenericRead | Native.GenericWrite,
                     Native.FileShareRead | Native.FileShareWrite, IntPtr.Zero, Native.OpenExisting, Native.FileFlagOverlapped, IntPtr.Zero);

@@ -128,10 +128,18 @@ namespace MxHaptics
             int nextSearch = Environment.TickCount;   // not 0: TickCount is negative after ~24.9 days of uptime
             int retryDelay = MinRetryDelayMs;
 
+            // Clear the field before disposing: a thread abort in between leaks the device instead of letting
+            // the finally below free its native memory a second time.
+            void Drop()
+            {
+                var d = device;
+                device = null;
+                d?.Dispose();
+            }
+
             void GiveUp()
             {
-                device?.Dispose();
-                device = null;
+                Drop();
                 nextSearch = Environment.TickCount + retryDelay;
                 retryDelay = Math.Min(retryDelay * 2, MaxRetryDelayMs);
             }
@@ -148,8 +156,7 @@ namespace MxHaptics
                             if (device != null && device.Play((byte)waveform)) continue;
 
                             // First play, or the mouse was unplugged / fell asleep: search, then retry this play once.
-                            device?.Dispose();
-                            device = null;
+                            Drop();
                             if (Environment.TickCount - nextSearch < 0) continue;   // backing off: drop the play
                             device = HidppHapticDevice.Find();
                             while (queue.TryDequeue(out _)) { }   // plays queued during the search are stale
@@ -159,14 +166,17 @@ namespace MxHaptics
                         catch (Exception e)   // keep the worker alive; a dead worker would stop all haptics
                         {
                             GiveUp();
-                            WarnOnce("haptics paused until the mouse is found again: " + e);
+                            // No warning while stopping: the domain-reload thread abort is expected and must not
+                            // use up the one warning per session.
+                            if (!stopping) WarnOnce("haptics paused until the mouse is found again: " + e);
                         }
                     }
                 }
             }
             finally
             {
-                device?.Dispose();
+                Drop();
+                HidTransport.Shutdown();
             }
         }
 #endif

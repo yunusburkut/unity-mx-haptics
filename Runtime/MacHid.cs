@@ -13,11 +13,21 @@ namespace MxHaptics
         // Same setup as hidapi: one manager that only lists devices, scheduled on the worker thread's run loop,
         // which is pumped before each search so plugged / unplugged devices show up. The manager is never opened:
         // IOHIDManagerOpen would open every keyboard too and ask for Input Monitoring even without the mouse.
-        // Only Logitech candidates are opened, one by one, below. One manager per domain load is left behind on
-        // Editor domain reloads; harmless, and releasing it could release devices still in use.
+        // Only Logitech candidates are opened, one by one, below. Shutdown releases it when the worker exits.
         static IntPtr manager;
 
-        // Logitech HID devices that accept 20-byte output reports; the HID++ resolve step rejects the rest.
+        // Called on the worker thread as it exits; open MacHid devices hold their own retain.
+        public static void Shutdown()
+        {
+            if (manager == IntPtr.Zero) return;
+            Mac.IOHIDManagerUnscheduleFromRunLoop(manager, Mac.CFRunLoopGetCurrent(), Mac.DefaultMode);
+            Mac.CFRelease(manager);
+            manager = IntPtr.Zero;
+        }
+
+        // Logitech mice and vendor (HID++) interfaces that accept 20-byte output reports; the HID++ resolve step
+        // rejects the rest. Keyboards, wheels and headsets are never opened: opening a keyboard makes macOS ask
+        // for Input Monitoring. Ceiling: a Logitech keyboard that also reports a mouse collection is still opened.
         public static IEnumerable<IHidTransport> OpenCandidates()
         {
             if (manager == IntPtr.Zero)
@@ -37,6 +47,8 @@ namespace MxHaptics
                 {
                     if (Mac.GetIntProperty(device, "VendorID") != HidppHapticDevice.LogitechVid) continue;
                     if (Mac.GetIntProperty(device, "MaxOutputReportSize") < HidppHapticDevice.LongLength) continue;
+                    bool mouse = Mac.IOHIDDeviceConformsTo(device, 0x01, 0x02);   // Generic Desktop / Mouse (Bluetooth)
+                    if (!mouse && Mac.GetIntProperty(device, "PrimaryUsagePage") < 0xFF00) continue;   // receiver: vendor page
                     int status = Mac.IOHIDDeviceOpen(device, 0);
                     if (status == KIOReturnNotPermitted) MxHapticsClient.WarnOnce(PermissionHint);
                     if (status != 0) continue;
@@ -147,6 +159,8 @@ namespace MxHaptics
         [DllImport(IOKit)] public static extern void IOHIDManagerSetDeviceMatching(IntPtr manager, IntPtr matching);
         [DllImport(IOKit)] public static extern IntPtr IOHIDManagerCopyDevices(IntPtr manager);
         [DllImport(IOKit)] public static extern void IOHIDManagerScheduleWithRunLoop(IntPtr manager, IntPtr runLoop, IntPtr mode);
+        [DllImport(IOKit)] public static extern void IOHIDManagerUnscheduleFromRunLoop(IntPtr manager, IntPtr runLoop, IntPtr mode);
+        [DllImport(IOKit)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool IOHIDDeviceConformsTo(IntPtr device, uint usagePage, uint usage);
         [DllImport(IOKit)] public static extern IntPtr IOHIDDeviceGetProperty(IntPtr device, IntPtr key);
         [DllImport(IOKit)] public static extern int IOHIDDeviceOpen(IntPtr device, int options);
         [DllImport(IOKit)] public static extern int IOHIDDeviceClose(IntPtr device, int options);
