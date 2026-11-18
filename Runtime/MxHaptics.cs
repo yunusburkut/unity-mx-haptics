@@ -36,9 +36,6 @@ namespace MxHaptics
     {
         static readonly ConcurrentQueue<MxWaveform> queue = new ConcurrentQueue<MxWaveform>();
         static readonly AutoResetEvent signal = new AutoResetEvent(false);
-        static readonly object startLock = new object();
-        static Thread worker;
-        static volatile bool stopping;
 
         // iOS-style API. The mouse firmware only plays its fixed waveforms (no custom amplitude curves),
         // so each iOS call maps to the closest one; it is not a 1:1 copy of the Taptic Engine feel.
@@ -85,6 +82,9 @@ namespace MxHaptics
 
 #if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS || UNITY_EDITOR_OSX || (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || MXHAPTICS_MAC
         const int RediscoverDelayMs = 3000;   // after a failed search, do not enumerate HID devices again for this long
+        static readonly object startLock = new object();
+        static Thread worker;
+        static volatile bool stopping;
 
         static void EnsureWorker()
         {
