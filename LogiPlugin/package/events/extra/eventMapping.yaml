@@ -1,0 +1,24 @@
+# Each event plays the waveform of the same name.
+haptics:
+    sharp_collision:
+        DEFAULT: sharp_collision
+    damp_collision:
+        DEFAULT: damp_collision
+    subtle_collision:
+        DEFAULT: subtle_collision
+    sharp_state_change:
+        DEFAULT: sharp_state_change
+    damp_state_change:
+        DEFAULT: damp_state_change
+    knock:
+        DEFAULT: knock
+    ringing:
+        DEFAULT: ringing
+    jingle:
+        DEFAULT: jingle
+    completed:
+        DEFAULT: completed
+    happy_alert:
+        DEFAULT: happy_alert
+    angry_alert:
+        DEFAULT: angry_alert

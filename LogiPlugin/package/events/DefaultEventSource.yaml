@@ -1,0 +1,36 @@
+displayName: Unity Haptics
+description: Haptic waveforms requested by a Unity game over UDP 127.0.0.1:47800
+events:
+    - name: sharp_collision
+      displayName: Sharp Collision
+      description: Hard hit, impact
+    - name: damp_collision
+      displayName: Damp Collision
+      description: Soft hit, landing
+    - name: subtle_collision
+      displayName: Subtle Collision
+      description: Light, frequent tick
+    - name: sharp_state_change
+      displayName: Sharp State Change
+      description: Something turned on
+    - name: damp_state_change
+      displayName: Damp State Change
+      description: Something turned off
+    - name: knock
+      displayName: Knock
+      description: Knock
+    - name: ringing
+      displayName: Ringing
+      description: Ringing
+    - name: jingle
+      displayName: Jingle
+      description: Rare celebration
+    - name: completed
+      displayName: Completed
+      description: Task finished
+    - name: happy_alert
+      displayName: Happy Alert
+      description: Positive alert
+    - name: angry_alert
+      displayName: Angry Alert
+      description: Negative alert, damage

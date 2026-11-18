@@ -1,0 +1,26 @@
+type: plugin4
+name: UnityHaptics
+displayName: Unity Haptics
+description: Plays MX Master 4 haptic waveforms requested by a Unity game over local UDP.
+pluginFileName: UnityHapticsPlugin.dll
+version: 0.1
+author: yunusburkut
+copyright: Copyright (c) 2026 yunusburkut. MIT License.
+
+# Logitech's sample comments the Windows line out; without it the service fails with
+# "Value cannot be null (Parameter 'fileName')".
+pluginFolderWin: bin
+pluginFolderMac: bin
+
+supportedDevices:
+    - LoupedeckCtFamily
+
+pluginCapabilities:
+    - HasHapticMapping
+
+minimumLoupedeckVersion: 6.0
+
+license: MIT
+licenseUrl: https://opensource.org/licenses/MIT
+supportPageUrl: https://github.com/yunusburkut/unity-mx-haptics/issues
+homePageUrl: https://github.com/yunusburkut/unity-mx-haptics
