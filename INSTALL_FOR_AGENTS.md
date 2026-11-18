@@ -1,22 +1,31 @@
 # Install guide for AI coding agents
 
-The user asked you to install this package so that every haptic their Unity project already plays on an iPhone
-also plays on their Logitech MX Master 4 while they work in the Unity Editor. Follow these steps in order. Do not
-ask the user to wire anything by hand.
+**Follow this guide only when the user explicitly asked you to install this package (unity-mx-haptics) into
+their Unity project.** It is not a set of instructions for other work in this folder or in a project that
+already contains the package.
+
+Goal: every haptic the user's project plays on an iPhone also plays on their Logitech MX Master 4 while they work
+in the Unity Editor. You do the wiring; the user should not have to wire anything by hand.
 
 Rules for everything you add:
 
 - Wrap all added code in `#if UNITY_EDITOR`. Nothing you add may reach a phone build.
-- Mirror what an iPhone plays, using the iOS preset names below. Do not change what the project itself plays.
-- Mark every line you add in third-party files with `// MxHaptics hook`, so it can be found and removed.
+- Mirror what an iPhone plays, using the iOS names below. Do not change what the project itself plays.
+- Mark every line you add to third-party files with `// MxHaptics hook`, so it can be found and removed.
+- Before you edit any third-party file (Nice Vibrations, Feel, plugins), show the user the planned changes and
+  wait for their OK.
+- If a hook line marked `// MxHaptics hook` already exists, leave it; never add it twice.
 
 ## 1. Add the package
 
 Add this line to `dependencies` in `Packages/manifest.json`:
 
 ```json
-"com.yunusburkut.mxhaptics": "https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.0"
+"com.yunusburkut.mxhaptics": "https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.1"
 ```
+
+Tell the user: `manifest.json` is usually committed, so teammates get the package too. For them it only acts
+in the Editor when a haptic plays, and it does nothing without a Logitech haptic mouse.
 
 The package compiles only for the Editor and Windows / macOS players, so it is not in phone builds at all.
 The API is in namespace `MxHaptics`, assembly `MxHaptics` (auto-referenced). Each call matches one iOS haptic:
@@ -31,22 +40,28 @@ The API is in namespace `MxHaptics`, assembly `MxHaptics` (auto-referenced). Eac
 
 Search the project's own `.cs` files, and its `.unity` / `.prefab` / `.asset` files for Feel feedbacks:
 
-| Search for | Haptic system |
-|---|---|
-| `HapticPatterns.`, `HapticController.`, `using Lofelt.NiceVibrations` | Nice Vibrations (also inside Feel) |
-| `MMF_NVPreset`, `MMF_NVEmphasis`, `MMF_NVContinuous`, `MMF_NVClip` | Feel haptic feedbacks (they call Nice Vibrations) |
-| `Handheld.Vibrate` | Unity's built-in vibration |
-| `UIImpactFeedbackGenerator`, `UINotificationFeedbackGenerator`, `Taptic`, `Vibration.`, `Haptic` in class names | native iOS plugins and the project's own wrappers |
+| Search for | Haptic system | Step |
+|---|---|---|
+| `HapticPatterns.`, `HapticController.`, `using Lofelt.NiceVibrations` | Nice Vibrations 4 (also inside Feel) | 3a |
+| `MMF_NVPreset`, `MMF_NVEmphasis`, `MMF_NVContinuous`, `MMF_NVClip` | Feel haptic feedbacks (they call Nice Vibrations 4) | 3a |
+| `MMVibrationManager.`, `HapticTypes.`, `using MoreMountains.NiceVibrations` | Nice Vibrations 3 (older) | 3b |
+| `Handheld.Vibrate` | Unity's built-in vibration | 3b |
+| `UIImpactFeedbackGenerator`, `UINotificationFeedbackGenerator`, `Taptic`, `Vibration.`, `Haptic` in class names | native iOS plugins and the project's own wrappers | 3b |
 
 List every call site, then mirror them as below.
 
-## 3a. Nice Vibrations or Feel: add one hook
+## 3a. Nice Vibrations 4 or Feel: add one hook
 
 Every Nice Vibrations haptic goes through four methods, so a hook there mirrors all of them: code calls and Feel
 feedbacks in scenes alike. Nice Vibrations fires no event on desktop, so add one. It reports the iPhone preset each
 call plays, using Nice Vibrations' own iOS choices.
 
 Find `HapticPatterns.cs` and `HapticController.cs` (usually `Assets/Feel/NiceVibrations/Scripts/Components/`).
+If they are under `Library/PackageCache` or another read-only package, stop: edits there are undone on the next
+package resolve. Tell the user, and offer to mirror the project's own call sites with step 3b instead.
+
+If a method below is missing or its signature differs (another Nice Vibrations version), do not improvise in the
+vendor code: skip the hook, use step 3b for the project's call sites, and say so in your report.
 
 In `HapticPatterns`, as the first member of `public static class HapticPatterns`:
 
@@ -86,15 +101,15 @@ In `HapticController`, as the first lines of the parameterless `Play()` (a `.hap
 
 ```csharp
 #if UNITY_EDITOR // MxHaptics hook
-            if (_hapticsEnabled) HapticPatterns.MxHapticsPlayed?.Invoke(fallbackPreset != HapticPatterns.PresetType.None ? fallbackPreset : HapticPatterns.PresetType.MediumImpact); // MxHaptics hook
+            if (hapticsEnabled) HapticPatterns.MxHapticsPlayed?.Invoke(fallbackPreset != HapticPatterns.PresetType.None ? fallbackPreset : HapticPatterns.PresetType.MediumImpact); // MxHaptics hook
 #endif // MxHaptics hook
 ```
 
-If a method name or signature differs in this Nice Vibrations version, add the line to the method that does the
-same job, and say so in your report.
+Then create `MxHapticsMirror.cs` in the project's game code:
 
-Then create `MxHapticsMirror.cs` in the project's game code. If that code has an asmdef, add `MxHaptics` and
-`Lofelt.NiceVibrations` to its references.
+- If that code has an asmdef, add `MxHaptics` and `Lofelt.NiceVibrations` to its references.
+- If Nice Vibrations has no asmdef (it compiles into `Assembly-CSharp`), put the mirror in a folder without an
+  asmdef, so it compiles into `Assembly-CSharp` too.
 
 ```csharp
 #if UNITY_EDITOR   // Editor only: not compiled into phone or any other player build
@@ -114,7 +129,8 @@ static class MxHapticsMirror
 
     static void Play(HapticPatterns.PresetType preset)
     {
-        // A preset can also reach HapticController.Play() in the same frame: play it once.
+        // One haptic per frame: a preset also reaches HapticController.Play() in the same frame, and the mouse
+        // plays one waveform at a time anyway. A second, different haptic in the same frame is dropped.
         if (Time.frameCount == lastFrame) return;
         lastFrame = Time.frameCount;
 
@@ -135,22 +151,33 @@ static class MxHapticsMirror
 #endif
 ```
 
-Do not add MxHaptics lines next to the project's own Nice Vibrations calls; the hook already covers them.
+Do not add MxHaptics lines next to the project's own Nice Vibrations 4 calls; the hook already covers them.
 
 ## 3b. Any other haptic call
 
-Add the matching call from the table in step 1, inside `#if UNITY_EDITOR`, next to each call site. If every call
-goes through one wrapper in the project, add it once there instead.
+Add the matching call next to each call site. If every call goes through one wrapper in the project, add it once
+there instead.
 
-- An iOS-named call maps one to one: `UIImpactFeedbackStyle.Medium` becomes `Impact(MxImpactStyle.Medium)`.
-- `Handheld.Vibrate()` is the iPhone's long system buzz: use `Notification(MxNotificationType.Error)`.
-- Anything else: map by what the iPhone plays, using the table in step 1.
+- Wrap it in `#if UNITY_EDITOR`, and place it outside any platform block such as `#if UNITY_IOS` or
+  `#if UNITY_ANDROID`; inside one, it would only compile when that build target is active.
+- If the file belongs to an asmdef, add `MxHaptics` to that asmdef's references.
 
 ```csharp
 #if UNITY_EDITOR
             MxHaptics.MxHapticsClient.Impact(MxHaptics.MxImpactStyle.Medium);
 #endif
 ```
+
+Mapping, by what the iPhone plays:
+
+- Nice Vibrations 3 `MMVibrationManager.Haptic(HapticTypes.X)`: the `HapticTypes` names are the iOS names, so
+  map one to one, for example `HapticTypes.LightImpact` to `Impact(MxImpactStyle.Light)` and `HapticTypes.Failure`
+  to `Notification(MxNotificationType.Error)`. `TransientHaptic(intensity, …)`: above 0.5 Heavy, above 0.3
+  Medium, else Light. `ContinuousHaptic`: Heavy. Feel's legacy `MMFeedbackHaptics` components in scenes are not
+  covered by this; list them in your report.
+- An iOS-named call maps one to one: `UIImpactFeedbackStyle.Medium` becomes `Impact(MxImpactStyle.Medium)`.
+- `Handheld.Vibrate()` is the iPhone's long system buzz: use `Notification(MxNotificationType.Error)`.
+- Anything else: pick the closest row of the table in step 1.
 
 ## 4. Check and report
 
@@ -160,6 +187,16 @@ goes through one wrapper in the project, add it once there instead.
 4. Tell the user what to expect:
    - Only the Editor plays haptics on the mouse. Phone builds contain none of this code.
    - The mouse plays fixed waveforms, so a long `.haptic` clip or a constant buzz becomes one short pulse.
-   - Updating Feel or Nice Vibrations removes the hook lines. Running the same install request again restores
-     them.
+   - Updating Feel or Nice Vibrations removes the hook lines. Running the same install request again
+     restores them.
    - On macOS, the first use may ask for Input Monitoring permission (System Settings > Privacy & Security).
+
+## Uninstall
+
+When the user asks to remove the package:
+
+1. Delete every line marked `// MxHaptics hook` (search the whole project).
+2. Delete `MxHapticsMirror.cs` and every `#if UNITY_EDITOR` block that calls `MxHapticsClient`.
+3. Remove `MxHaptics` from asmdef references you added.
+4. Remove the `com.yunusburkut.mxhaptics` line from `Packages/manifest.json`.
+5. Let Unity compile and confirm the Console has no errors.

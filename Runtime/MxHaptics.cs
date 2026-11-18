@@ -30,13 +30,11 @@ namespace MxHaptics
     public enum MxNotificationType { Success, Warning, Error }
 
     // Plays MX Master 4 haptic waveforms by writing HID++ reports straight to the mouse.
-    // No Logi Options+ needed. Fire and forget: without a haptic mouse, Play does nothing.
-    // Windows (WindowsHid.cs) and macOS (MacHid.cs); a no-op on every other platform.
+    // No Logi Options+ needed. Fire and forget: without a haptic mouse, nothing happens.
+    // Windows (WindowsHid.cs) and macOS (MacHid.cs). The asmdef leaves the package out of every other player
+    // build; in the Linux Editor the calls do nothing.
     public static class MxHapticsClient
     {
-        static readonly ConcurrentQueue<MxWaveform> queue = new ConcurrentQueue<MxWaveform>();
-        static readonly AutoResetEvent signal = new AutoResetEvent(false);
-
         // iOS-style API. The mouse firmware only plays its fixed waveforms (no custom amplitude curves),
         // so each iOS call maps to the closest one; it is not a 1:1 copy of the Taptic Engine feel.
         // Tune the feel by editing these two tables.
@@ -55,9 +53,29 @@ namespace MxHaptics
             MxWaveform.AngryAlert,   // Error
         };
 
-        public static void Impact(MxImpactStyle style) => Play(ImpactMap[(int)style]);
+        public static void Impact(MxImpactStyle style)
+        {
+            if ((uint)style < (uint)ImpactMap.Length) Play(ImpactMap[(int)style]);
+        }
+
         public static void Selection() => Play(MxWaveform.WhisperCollision);   // UISelectionFeedbackGenerator
-        public static void Notification(MxNotificationType type) => Play(NotificationMap[(int)type]);
+
+        public static void Notification(MxNotificationType type)
+        {
+            if ((uint)type < (uint)NotificationMap.Length) Play(NotificationMap[(int)type]);
+        }
+
+        // Safe to call from any thread. Call it on events, not every frame: the mouse plays one waveform at a
+        // time, and plays beyond MaxPending are dropped rather than queued up to lag behind the game.
+        public static void Play(MxWaveform waveform)
+        {
+#if !UNITY_EDITOR_LINUX
+            if (queue.Count >= MaxPending) return;
+            queue.Enqueue(waveform);
+            EnsureWorker();
+            signal.Set();
+#endif
+        }
 
         static int warned;
 
@@ -65,26 +83,23 @@ namespace MxHaptics
         internal static void WarnOnce(string message)
         {
             if (Interlocked.Exchange(ref warned, 1) != 0) return;
-#if UNITY_5_3_OR_NEWER
             UnityEngine.Debug.LogWarning("MxHaptics: " + message);
-#endif
         }
 
-        // Safe to call from any thread, every frame if needed; the HID write happens on a worker thread.
-        public static void Play(MxWaveform waveform)
-        {
-#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS || UNITY_EDITOR_OSX || (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || MXHAPTICS_MAC
-            queue.Enqueue(waveform);
-            EnsureWorker();
-            signal.Set();
-#endif
-        }
+#if !UNITY_EDITOR_LINUX
+        const int MaxPending = 4;
+        // After a failed search, wait before enumerating HID devices again: 3 s, doubling up to 60 s, so a
+        // machine without the mouse (or with only other Logitech devices) is not probed over and over.
+        // Ceiling: a mouse connected later can take up to 60 s to be found.
+        const int MinRetryDelayMs = 3000, MaxRetryDelayMs = 60000;
 
-#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS || UNITY_EDITOR_OSX || (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || MXHAPTICS_MAC
-        const int RediscoverDelayMs = 3000;   // after a failed search, do not enumerate HID devices again for this long
+        static readonly ConcurrentQueue<MxWaveform> queue = new ConcurrentQueue<MxWaveform>();
+        static readonly AutoResetEvent signal = new AutoResetEvent(false);
         static readonly object startLock = new object();
         static Thread worker;
         static volatile bool stopping;
+
+        internal static bool Stopping => stopping;
 
         static void EnsureWorker()
         {
@@ -111,6 +126,16 @@ namespace MxHaptics
         {
             HidppHapticDevice device = null;
             int nextSearch = Environment.TickCount;   // not 0: TickCount is negative after ~24.9 days of uptime
+            int retryDelay = MinRetryDelayMs;
+
+            void GiveUp()
+            {
+                device?.Dispose();
+                device = null;
+                nextSearch = Environment.TickCount + retryDelay;
+                retryDelay = Math.Min(retryDelay * 2, MaxRetryDelayMs);
+            }
+
             try
             {
                 while (!stopping)
@@ -128,18 +153,12 @@ namespace MxHaptics
                             if (Environment.TickCount - nextSearch < 0) continue;   // backing off: drop the play
                             device = HidppHapticDevice.Find();
                             while (queue.TryDequeue(out _)) { }   // plays queued during the search are stale
-                            if (device == null || !device.Play((byte)waveform))
-                            {
-                                device?.Dispose();
-                                device = null;
-                                nextSearch = Environment.TickCount + RediscoverDelayMs;
-                            }
+                            if (device != null && device.Play((byte)waveform)) retryDelay = MinRetryDelayMs;
+                            else GiveUp();
                         }
-                        catch (Exception e)   // keep the worker alive; a dead worker would let the queue grow forever
+                        catch (Exception e)   // keep the worker alive; a dead worker would stop all haptics
                         {
-                            device?.Dispose();
-                            device = null;
-                            nextSearch = Environment.TickCount + RediscoverDelayMs;
+                            GiveUp();
                             WarnOnce("haptics paused until the mouse is found again: " + e);
                         }
                     }

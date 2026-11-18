@@ -7,10 +7,10 @@ Make your Logitech MX Master 4 mouse vibrate from Unity. No extra software neede
 Making a mobile game with haptics? Tell Claude Code (or any AI coding agent), in any language:
 
 ```
-Install https://github.com/yunusburkut/unity-mx-haptics into my project so it mirrors my project's haptics one to one.
+Install https://github.com/yunusburkut/unity-mx-haptics/tree/v2.0.1 into my project so it mirrors my project's haptics one to one.
 ```
 
-The agent follows [AGENTS.md](AGENTS.md):
+The agent follows [INSTALL_FOR_AGENTS.md](INSTALL_FOR_AGENTS.md) and shows you its changes to third-party files before making them:
 
 1. It finds every haptic in your project: Nice Vibrations, Feel feedbacks, `Handheld.Vibrate` and native iOS calls.
 2. It adds an Editor-only mirror, so each one plays on the mouse as the iPhone haptic it would play.
@@ -21,10 +21,10 @@ The agent follows [AGENTS.md](AGENTS.md):
 In Unity: **Window → Package Manager → + → Add package from git URL**, then paste:
 
 ```
-https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.0
+https://github.com/yunusburkut/unity-mx-haptics.git#v2.0.1
 ```
 
-Drop `#v2.0.0` to always get the latest version.
+To update later, change the tag to the newest one in the repo's tags.
 
 ## Use
 
@@ -57,7 +57,7 @@ public static class GameHaptics
 }
 ```
 
-An ID the mouse doesn't know just does nothing. The next haptic still plays.
+IDs the mouse does not know were ignored in testing, and the next haptic still played. Unlisted IDs are at your own risk.
 
 ## Change the package
 
@@ -76,7 +76,7 @@ Fork the repo to share your version, and pull requests are welcome.
 ## Good to know
 
 - Works in the Editor and in Windows and macOS builds. Phone, console and WebGL builds don't include the package,
-  so wrap direct calls in shared code with `#if UNITY_EDITOR || UNITY_STANDALONE`.
+  so wrap direct calls in shared code with `#if UNITY_EDITOR || UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX`.
 - macOS may ask for **Input Monitoring** permission once (System Settings → Privacy & Security).
 - No mouse connected? Nothing happens, no errors.
 - Call it on events, not every frame.

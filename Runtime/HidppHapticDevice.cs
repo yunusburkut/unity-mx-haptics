@@ -1,4 +1,4 @@
-#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS || UNITY_EDITOR_OSX || (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || MXHAPTICS_MAC
+#if !UNITY_EDITOR_LINUX   // the asmdef already limits the package to the Editor and Windows / macOS players
 using System;
 
 namespace MxHaptics
@@ -20,7 +20,7 @@ namespace MxHaptics
         const ushort HapticFeature = 0x19B0;
         const byte LongReport = 0x11;      // HID++ long report: 20 bytes
         const byte SoftwareId = 0x0B;      // low nibble of byte 3; tells our replies apart from other apps'
-        const int ReplyTimeoutMs = 300;
+        public const int ReplyTimeoutMs = 300;
 
         // 0xFF = the device itself (Bluetooth); 1..6 = a slot on a Bolt / Unifying receiver.
         static readonly byte[] DeviceIndices = { 0xFF, 1, 2, 3, 4, 5, 6 };
@@ -57,6 +57,7 @@ namespace MxHaptics
         {
             foreach (byte index in DeviceIndices)
             {
+                if (MxHapticsClient.Stopping) return false;   // Editor domain reload: let the worker exit quickly
                 Fill(index, 0x00, 0x00, (byte)(HapticFeature >> 8), (byte)(HapticFeature & 0xFF));
                 if (!hid.Write(report)) continue;
 

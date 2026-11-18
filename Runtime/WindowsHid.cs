@@ -1,4 +1,4 @@
-#if !MXHAPTICS_MAC && (UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS)
+#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN)
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -14,6 +14,9 @@ namespace MxHaptics
         {
             foreach (string path in Native.EnumerateHidPaths())
             {
+                // Open only Logitech interfaces: USB / receiver paths carry "vid_046d", Bluetooth LE ones "vid&02046d".
+                // Other HID devices (security keys, controllers) are never touched.
+                if (path.IndexOf("046d", StringComparison.OrdinalIgnoreCase) < 0) continue;
                 var h = Native.CreateFile(path, Native.GenericRead | Native.GenericWrite,
                     Native.FileShareRead | Native.FileShareWrite, IntPtr.Zero, Native.OpenExisting, Native.FileFlagOverlapped, IntPtr.Zero);
                 if (h.IsInvalid) { h.Dispose(); continue; }   // mouse/keyboard collections are opened exclusively by Windows
@@ -71,7 +74,7 @@ namespace MxHaptics
         public bool Write(byte[] report)
         {
             Marshal.Copy(report, 0, buffer, HidppHapticDevice.LongLength);
-            return Transfer(write: true, length: HidppHapticDevice.LongLength, timeoutMs: 300) > 0;
+            return Transfer(write: true, length: HidppHapticDevice.LongLength, timeoutMs: HidppHapticDevice.ReplyTimeoutMs) > 0;
         }
 
         public int Read(byte[] destination, int timeoutMs)
@@ -83,17 +86,32 @@ namespace MxHaptics
         }
 
         // Always waits for the I/O to finish (or be cancelled) before returning, so buffer and overlapped
-        // are never freed or reused while Windows still owns them.
+        // are never freed or reused while Windows still owns them. The wait-out sits in finally, so a thread
+        // abort during an Editor domain reload cannot skip it.
         int Transfer(bool write, int length, int timeoutMs)
         {
-            ioDone.Reset();
-            Marshal.StructureToPtr(new NativeOverlapped { EventHandle = ioDone.SafeWaitHandle.DangerousGetHandle() }, overlapped, false);
-            bool started = write
-                ? Native.WriteFile(handle, buffer, length, IntPtr.Zero, overlapped)
-                : Native.ReadFile(handle, buffer, length, IntPtr.Zero, overlapped);
-            if (!started && Marshal.GetLastWin32Error() != Native.ErrorIoPending) return 0;
-            if (!ioDone.WaitOne(timeoutMs)) Native.CancelIoEx(handle, overlapped);
-            return Native.GetOverlappedResult(handle, overlapped, out int bytes, true) ? bytes : 0;
+            bool pending = false, done = false;
+            int transferred = 0;
+            try
+            {
+                ioDone.Reset();
+                Marshal.StructureToPtr(new NativeOverlapped { EventHandle = ioDone.SafeWaitHandle.DangerousGetHandle() }, overlapped, false);
+                bool started = write
+                    ? Native.WriteFile(handle, buffer, length, IntPtr.Zero, overlapped)
+                    : Native.ReadFile(handle, buffer, length, IntPtr.Zero, overlapped);
+                if (!started && Marshal.GetLastWin32Error() != Native.ErrorIoPending) return 0;
+                pending = true;
+                done = ioDone.WaitOne(timeoutMs);
+            }
+            finally
+            {
+                if (pending)
+                {
+                    if (!done) Native.CancelIoEx(handle, overlapped);
+                    if (!Native.GetOverlappedResult(handle, overlapped, out transferred, true)) transferred = 0;
+                }
+            }
+            return transferred;
         }
 
         public void Dispose()
@@ -166,9 +184,10 @@ namespace MxHaptics
         public static extern bool CancelIoEx(SafeFileHandle h, IntPtr overlapped);
 
         [DllImport("hid.dll")] static extern void HidD_GetHidGuid(out Guid guid);
-        [DllImport("hid.dll", SetLastError = true)] public static extern bool HidD_GetAttributes(SafeFileHandle h, ref HiddAttributes attributes);
-        [DllImport("hid.dll", SetLastError = true)] public static extern bool HidD_GetPreparsedData(SafeFileHandle h, out IntPtr data);
-        [DllImport("hid.dll")] public static extern bool HidD_FreePreparsedData(IntPtr data);
+        // These return a 1-byte BOOLEAN, not a 4-byte BOOL.
+        [DllImport("hid.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.U1)] public static extern bool HidD_GetAttributes(SafeFileHandle h, ref HiddAttributes attributes);
+        [DllImport("hid.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.U1)] public static extern bool HidD_GetPreparsedData(SafeFileHandle h, out IntPtr data);
+        [DllImport("hid.dll")] [return: MarshalAs(UnmanagedType.U1)] public static extern bool HidD_FreePreparsedData(IntPtr data);
         [DllImport("hid.dll")] public static extern int HidP_GetCaps(IntPtr data, out HidpCaps caps);
 
         [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "SetupDiGetClassDevsW")]
