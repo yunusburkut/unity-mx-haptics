@@ -31,7 +31,7 @@ namespace MxHaptics
 
     // Plays MX Master 4 haptic waveforms by writing HID++ reports straight to the mouse.
     // No Logi Options+ needed. Fire and forget: without a haptic mouse, Play does nothing.
-    // Windows only for now; macOS would need an IOKit HID backend in the same shape.
+    // Windows (WindowsHid.cs) and macOS (MacHid.cs); a no-op on every other platform.
     public static class MxHapticsClient
     {
         static readonly ConcurrentQueue<MxWaveform> queue = new ConcurrentQueue<MxWaveform>();
@@ -62,17 +62,28 @@ namespace MxHaptics
         public static void Selection() => Play(MxWaveform.WhisperCollision);   // UISelectionFeedbackGenerator
         public static void Notification(MxNotificationType type) => Play(NotificationMap[(int)type]);
 
+        static int warned;
+
+        // One warning per session, so a missing permission or a broken driver cannot flood the Console.
+        internal static void WarnOnce(string message)
+        {
+            if (Interlocked.Exchange(ref warned, 1) != 0) return;
+#if UNITY_5_3_OR_NEWER
+            UnityEngine.Debug.LogWarning("MxHaptics: " + message);
+#endif
+        }
+
         // Safe to call from any thread, every frame if needed; the HID write happens on a worker thread.
         public static void Play(MxWaveform waveform)
         {
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || MXHAPTICS_WINDOWS
+#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS || UNITY_EDITOR_OSX || (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || MXHAPTICS_MAC
             queue.Enqueue(waveform);
             EnsureWorker();
             signal.Set();
 #endif
         }
 
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || MXHAPTICS_WINDOWS
+#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS || UNITY_EDITOR_OSX || (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || MXHAPTICS_MAC
         const int RediscoverDelayMs = 3000;   // after a failed search, do not enumerate HID devices again for this long
 
         static void EnsureWorker()
@@ -100,7 +111,6 @@ namespace MxHaptics
         {
             HidppHapticDevice device = null;
             int nextSearch = Environment.TickCount;   // not 0: TickCount is negative after ~24.9 days of uptime
-            bool warned = false;
             try
             {
                 while (!stopping)
@@ -130,13 +140,7 @@ namespace MxHaptics
                             device?.Dispose();
                             device = null;
                             nextSearch = Environment.TickCount + RediscoverDelayMs;
-                            if (!warned)
-                            {
-                                warned = true;
-#if UNITY_5_3_OR_NEWER
-                                UnityEngine.Debug.LogWarning("MxHaptics disabled until the device is found again: " + e);
-#endif
-                            }
+                            WarnOnce("haptics paused until the mouse is found again: " + e);
                         }
                     }
                 }
