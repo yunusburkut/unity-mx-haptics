@@ -1,4 +1,4 @@
-#if UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS
+#if !MXHAPTICS_MAC && (UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN) || MXHAPTICS_WINDOWS)
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;

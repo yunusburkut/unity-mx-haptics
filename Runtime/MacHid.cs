@@ -8,17 +8,32 @@ namespace MxHaptics
     static class HidTransport
     {
         const int KIOReturnNotPermitted = unchecked((int)0xE00002E2);
-        static IntPtr manager;   // kept for the process lifetime; devices it lists stay valid while it lives
+        const string PermissionHint = "macOS blocked access to the mouse. Allow Unity (or your game) in System Settings > Privacy & Security > Input Monitoring, then restart it.";
 
-        // Logitech HID devices that accept 20-byte output reports. On macOS one IOHIDDevice covers all
-        // top-level collections, so the HID++ resolve step filters out devices that are not HID++.
+        // Same setup as hidapi: one manager, opened once and scheduled on the worker thread's run loop, which is
+        // pumped before each search so plugged / unplugged devices show up. One manager per domain load is
+        // left behind on Editor domain reloads; harmless, and closing it could close devices still in use.
+        static IntPtr manager;
+
+        // Logitech HID devices that accept 20-byte output reports; the HID++ resolve step rejects the rest.
         public static IEnumerable<IHidTransport> OpenCandidates()
         {
             if (manager == IntPtr.Zero)
             {
-                manager = Mac.IOHIDManagerCreate(IntPtr.Zero, 0);
-                Mac.IOHIDManagerSetDeviceMatching(manager, IntPtr.Zero);
+                IntPtr m = Mac.IOHIDManagerCreate(IntPtr.Zero, 0);
+                Mac.IOHIDManagerSetDeviceMatching(m, IntPtr.Zero);
+                Mac.IOHIDManagerScheduleWithRunLoop(m, Mac.CFRunLoopGetCurrent(), Mac.DefaultMode);
+                int status = Mac.IOHIDManagerOpen(m, 0);
+                if (status != 0)
+                {
+                    if (status == KIOReturnNotPermitted) MxHapticsClient.WarnOnce(PermissionHint);
+                    Mac.IOHIDManagerUnscheduleFromRunLoop(m, Mac.CFRunLoopGetCurrent(), Mac.DefaultMode);
+                    Mac.CFRelease(m);
+                    yield break;   // try again on the next search
+                }
+                manager = m;
             }
+            Mac.CFRunLoopRunInMode(Mac.DefaultMode, 0.001, false);   // let the manager process device arrivals
             IntPtr set = Mac.IOHIDManagerCopyDevices(manager);
             if (set == IntPtr.Zero) yield break;
             try
@@ -30,8 +45,7 @@ namespace MxHaptics
                     if (Mac.GetIntProperty(device, "VendorID") != HidppHapticDevice.LogitechVid) continue;
                     if (Mac.GetIntProperty(device, "MaxOutputReportSize") < HidppHapticDevice.LongLength) continue;
                     int status = Mac.IOHIDDeviceOpen(device, 0);
-                    if (status == KIOReturnNotPermitted)
-                        MxHapticsClient.WarnOnce("macOS blocked access to the mouse. Allow Unity (or your game) in System Settings > Privacy & Security > Input Monitoring.");
+                    if (status == KIOReturnNotPermitted) MxHapticsClient.WarnOnce(PermissionHint);
                     if (status != 0) continue;
                     yield return new MacHid(device);
                 }
@@ -80,7 +94,8 @@ namespace MxHaptics
             {
                 int left = deadline - Environment.TickCount;
                 if (left <= 0) return 0;
-                Mac.CFRunLoopRunInMode(Mac.DefaultMode, left / 1000.0, true);
+                // 1 = kCFRunLoopRunFinished: no sources left (device gone), so nothing will ever arrive.
+                if (Mac.CFRunLoopRunInMode(Mac.DefaultMode, left / 1000.0, true) == 1) return 0;
             }
             byte[] r = received.Dequeue();
             int n = Math.Min(r.Length, destination.Length);
@@ -140,6 +155,9 @@ namespace MxHaptics
         [DllImport(IOKit)] public static extern IntPtr IOHIDManagerCreate(IntPtr allocator, int options);
         [DllImport(IOKit)] public static extern void IOHIDManagerSetDeviceMatching(IntPtr manager, IntPtr matching);
         [DllImport(IOKit)] public static extern IntPtr IOHIDManagerCopyDevices(IntPtr manager);
+        [DllImport(IOKit)] public static extern int IOHIDManagerOpen(IntPtr manager, int options);
+        [DllImport(IOKit)] public static extern void IOHIDManagerScheduleWithRunLoop(IntPtr manager, IntPtr runLoop, IntPtr mode);
+        [DllImport(IOKit)] public static extern void IOHIDManagerUnscheduleFromRunLoop(IntPtr manager, IntPtr runLoop, IntPtr mode);
         [DllImport(IOKit)] public static extern IntPtr IOHIDDeviceGetProperty(IntPtr device, IntPtr key);
         [DllImport(IOKit)] public static extern int IOHIDDeviceOpen(IntPtr device, int options);
         [DllImport(IOKit)] public static extern int IOHIDDeviceClose(IntPtr device, int options);
