@@ -1,62 +1,35 @@
-# unity-mx-haptics
+# MX Master 4 Haptics for Unity
 
-Feel Unity game events on the haptic motor of a Logitech **MX Master 4**. Install the package and call it:
-no Logi Options+, no plugin, no native DLL.
-
-```
-MxHapticsClient.Play()  ->  worker thread  ->  HID++ 2.0 report (feature 0x19b0)  ->  MX Master 4
-```
-
-The package writes HID++ reports straight to the mouse through the Windows HID API (`hid.dll`, P/Invoke).
-It works over Bluetooth and over a Bolt / Unifying receiver.
+Make your Logitech MX Master 4 mouse vibrate from Unity. No extra software needed.
 
 ## Install
 
-Package Manager → **Add package from git URL**:
+In Unity: **Window → Package Manager → + → Add package from git URL**, then paste:
 
 ```
-https://github.com/yunusburkut/unity-mx-haptics.git?path=/UnityPackage
+https://github.com/yunusburkut/unity-mx-haptics.git
 ```
 
 ## Use
 
-iOS-style API (same names as `UIImpactFeedbackGenerator`, `UISelectionFeedbackGenerator`,
-`UINotificationFeedbackGenerator`):
-
 ```csharp
 using MxHaptics;
 
-MxHapticsClient.Impact(MxImpactStyle.Heavy);              // hit
-MxHapticsClient.Selection();                              // menu tick
-MxHapticsClient.Notification(MxNotificationType.Success); // level complete
+MxHapticsClient.Impact(MxImpactStyle.Heavy);              // a hit
+MxHapticsClient.Selection();                              // a menu tick
+MxHapticsClient.Notification(MxNotificationType.Success); // a win
 ```
 
-Or a raw firmware waveform:
+The names match iOS haptics. You can also play any of the mouse's 16 waveforms:
 
 ```csharp
 MxHapticsClient.Play(MxWaveform.Firework);
 ```
 
-Calls are fire and forget and safe from any thread. Without a haptic mouse they do nothing.
+## Good to know
 
-## iOS mapping
+- Works on Windows. On other platforms the calls do nothing, so your game still builds.
+- No mouse connected? Nothing happens, no errors.
+- Call it on events, not every frame.
 
-The mouse plays only its 16 built-in waveforms; custom amplitude curves are not possible.
-Each iOS call maps to the closest waveform, so the feel is similar, not identical.
-Edit `ImpactMap` / `NotificationMap` in `MxHaptics.cs` to tune it.
-
-| iOS | MX Master 4 waveform |
-|---|---|
-| Impact Light / Medium / Heavy | `SubtleCollision` / `DampCollision` / `SharpCollision` |
-| Impact Soft / Rigid | `DampStateChange` / `SharpStateChange` |
-| Selection | `WhisperCollision` |
-| Notification Success / Warning / Error | `HappyAlert` / `Knock` / `AngryAlert` |
-
-## Limits
-
-- Windows only (Editor and standalone player). Other platforms compile to a no-op; macOS needs an IOKit backend.
-- The HID++ haptic feature (0x19b0) is undocumented. Function numbers and waveform IDs come from
-  [OpenLogi](https://github.com/AprilNEA/OpenLogi) (MIT). A firmware update could change them.
-- No rate limit: a call every frame floods the motor. Call it on events.
-
-MIT License.
+MIT License. Protocol details from [OpenLogi](https://github.com/AprilNEA/OpenLogi).
